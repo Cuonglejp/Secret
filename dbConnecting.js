@@ -2,6 +2,7 @@ require("dotenv").config();
 const mongoose = require("mongoose");
 const secretModel = require("./modules/secret").model;
 const accountModel  = require("./modules/account").model;
+const md5 = require('md5');
 
 class DBConnecting {
     constructor(){
@@ -21,7 +22,7 @@ class DBConnecting {
         try{
             let account = new accountModel({
                 username: i_username,
-                password : i_password
+                password : md5(i_password)
             });
             if(!await accountModel.exists({username: i_username})){    
                 await account.save();
@@ -50,7 +51,7 @@ class DBConnecting {
         try{
             let user =  await accountModel.findOne({username: i_username});
             if(user){
-                if(user.password === i_password){
+                if(user.password === md5(i_password)){
                     return 1;
                 }else{
                     return 0;
