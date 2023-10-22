@@ -2,7 +2,8 @@ require("dotenv").config();
 const mongoose = require("mongoose");
 const secretModel = require("./modules/secret").model;
 const accountModel  = require("./modules/account").model;
-const md5 = require('md5');
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
 
 class DBConnecting {
     constructor(){
@@ -20,10 +21,13 @@ class DBConnecting {
 
     async createNewAccount(i_username, i_password){
         try{
+            let hash = await bcrypt.hash(i_password,saltRounds);
+            
             let account = new accountModel({
                 username: i_username,
-                password : md5(i_password)
+                password: hash
             });
+
             if(!await accountModel.exists({username: i_username})){    
                 await account.save();
                 return 1;
@@ -51,7 +55,8 @@ class DBConnecting {
         try{
             let user =  await accountModel.findOne({username: i_username});
             if(user){
-                if(user.password === md5(i_password)){
+                let result = await bcrypt.compare(i_password, user.password);
+                if(result ===  true){
                     return 1;
                 }else{
                     return 0;
