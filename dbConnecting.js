@@ -2,12 +2,12 @@ require("dotenv").config();
 const mongoose = require("mongoose");
 const secretModel = require("./modules/secret").model;
 const accountModel  = require("./modules/account").model;
-const bcrypt = require("bcrypt");
-const saltRounds = 10;
 
 class DBConnecting {
-    constructor(){
+    constructor(passport){
+        //Connect to database
         let dbConnectionStr = process.env.CONNECTION_MONGODB_STR;
+
         try{
             mongoose.connect(dbConnectionStr);
         }catch(err){
@@ -17,19 +17,18 @@ class DBConnecting {
                 message: err.message
             };
         }
+
+        // use static authenticate method of model in LocalStrategy
+        const LocalStrategy = require('passport-local').Strategy; 
+        passport.use(new LocalStrategy(accountModel.authenticate())); 
+        passport.serializeUser(accountModel.serializeUser());
+        passport.deserializeUser(accountModel.deserializeUser());
     }
 
-    async createNewAccount(i_username, i_password){
-        try{
-            let hash = await bcrypt.hash(i_password,saltRounds);
-            
-            let account = new accountModel({
-                username: i_username,
-                password: hash
-            });
-
-            if(!await accountModel.exists({username: i_username})){    
-                await account.save();
+    async createNewAccount(i_username, i_password,req, res){
+        try{ 
+            if(!await accountModel.exists({username: i_username})){       
+                await accountModel.register({username:i_username}, i_password);
                 return 1;
             }
             else{
@@ -53,9 +52,8 @@ class DBConnecting {
      */
     async checkAccountCorrect(i_username, i_password){
         try{
-            let user =  await accountModel.findOne({username: i_username});
             if(user){
-                let result = await bcrypt.compare(i_password, user.password);
+                
                 if(result ===  true){
                     return 1;
                 }else{
