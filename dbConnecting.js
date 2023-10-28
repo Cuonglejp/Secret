@@ -2,12 +2,12 @@ require("dotenv").config();
 const mongoose = require("mongoose");
 const secretModel = require("./modules/secret").model;
 const accountModel  = require("./modules/account").model;
-const bcrypt = require("bcrypt");
-const saltRounds = 10;
 
 class DBConnecting {
-    constructor(){
+    constructor(passport){
+        //Connect to database
         let dbConnectionStr = process.env.CONNECTION_MONGODB_STR;
+
         try{
             mongoose.connect(dbConnectionStr);
         }catch(err){
@@ -17,19 +17,25 @@ class DBConnecting {
                 message: err.message
             };
         }
+        // use static authenticate method of model in LocalStrategy
+        const LocalStrategy = require('passport-local').Strategy; 
+        passport.use(new LocalStrategy(accountModel.authenticate())); 
+        passport.serializeUser(function(user, done) {
+            done(null, user._id);
+            // if you use Model.id as your idAttribute maybe you'd want
+            // done(null, user.id);
+        });
+        
+        passport.deserializeUser(function(id, done) {
+            var user =  accountModel.findById(id);
+            done(null, user);
+        });
     }
 
     async createNewAccount(i_username, i_password){
-        try{
-            let hash = await bcrypt.hash(i_password,saltRounds);
-            
-            let account = new accountModel({
-                username: i_username,
-                password: hash
-            });
-
-            if(!await accountModel.exists({username: i_username})){    
-                await account.save();
+        try{ 
+            if(!await accountModel.exists({username: i_username})){       
+                await accountModel.register({username:i_username}, i_password);
                 return 1;
             }
             else{
@@ -44,6 +50,31 @@ class DBConnecting {
         }
     }
 
+    async findAndCreateExternalAccount(profile){
+        try{
+            let account ;
+            if(profile.provider === "google"){
+                account = await accountModel.findOne({"externalInfos.sub" : profile.id});
+            }else{
+                account = await accountModel.findOne({"externalInfos.id" : profile.id});
+            }
+
+            if(!account){
+                account = new accountModel({
+                    provider: profile.provider,
+                    externalInfos: profile._json
+                });
+                await account.save();
+            }
+            return account;
+        }catch(err){            
+            this.error = {
+            title : "Create by "+profile.provider+" account",
+            type: "DB001",
+            message: err.message
+        };}
+    }
+
     /**
      * Check if the account is correct
      *
@@ -53,9 +84,8 @@ class DBConnecting {
      */
     async checkAccountCorrect(i_username, i_password){
         try{
-            let user =  await accountModel.findOne({username: i_username});
             if(user){
-                let result = await bcrypt.compare(i_password, user.password);
+                
                 if(result ===  true){
                     return 1;
                 }else{
