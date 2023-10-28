@@ -6,18 +6,20 @@ const session = require("express-session");
 const passport = require("passport");
 const dbConnectingClass = require("./dbConnecting");
 require("dotenv").config();
+var GoogleStrategy = require("passport-google-oauth20").Strategy;
+var FacebookStrategy = require("passport-facebook").Strategy; 
 
 const app = express();
 const port = process.env.PORT;
 
-app.use(express.static('public'));
-app.set('view engine', 'ejs');
+app.use(express.static("public"));
+app.set("view engine", "ejs");
 app.use(bodyParser.urlencoded({
     extended : true
 }));
 
 app.use(session({
-    secret: 'keyboard cat',
+    secret: "keyboard cat",
     resave: false,
     saveUninitialized: true,
     cookie: { secure: false }
@@ -27,6 +29,43 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 const dbConnecting = new dbConnectingClass(passport);
+
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret:process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/google/secrets"
+  }, async function(accessToken, refreshToken, profile, cb) {
+    const user = await dbConnecting.findAndCreateExternalAccount(profile);
+    return cb(dbConnecting.error,user);
+  }
+));
+
+app.get("/auth/google", passport.authenticate("google", { scope: ["profile"] }));
+
+app.get("/auth/google/secrets",  passport.authenticate("google", { failureRedirect: "/" }),
+  function(req, res) {
+    res.redirect("/secrets");
+});
+
+passport.use(new FacebookStrategy({
+    clientID: process.env.FACEBOOK_APP_ID,
+    clientSecret: process.env.FACEBOOK_APP_SECRET,
+    callbackURL: "http://localhost:3000/auth/facebook/secrets"
+  },
+  async function(accessToken, refreshToken, profile, cb) {
+    const user = await dbConnecting.findAndCreateExternalAccount(profile);
+    return cb(dbConnecting.error,user);
+  }
+));
+app.get("/auth/facebook",
+  passport.authenticate("facebook", passport.authenticate("facebook", { scope: ["profile","email"] })));
+
+app.get("/auth/facebook/secrets",
+  passport.authenticate("facebook", { failureRedirect: "/login" }),
+  function(req, res) {
+    // Successful authentication, redirect home.
+    res.redirect("/secrets");
+  });
 
 let loginMsg ;
 let registerMsg;
@@ -89,11 +128,9 @@ app.post("/register",async (req,res)=>{
     }
 });
 
-app.post("/login", passport.authenticate("local", {
-        successRedirect : "/secrets",
-        failureRedirect : "/login"
-    }),(req,res)=>{
-
+app.post("/login", passport.authenticate("local", { failureRedirect : "/login"}),
+    function(req, res) {
+        res.redirect("/secrets");
 });
 
 app.post("/submit", async (req,res) =>{

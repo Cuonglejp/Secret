@@ -5,12 +5,15 @@ const passportLocalMongoose = require('passport-local-mongoose');
 
 const accountSchema = new mongoose.Schema({
     username : {
-        type: String,
-        required : true
+        type: String
     },
     password : {
         type: String
     },
+    provider :{
+        type: String
+    },
+    externalInfos: Object,
     postSecrets : {
         type : [secretSchema]
     }

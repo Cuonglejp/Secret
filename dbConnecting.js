@@ -17,15 +17,22 @@ class DBConnecting {
                 message: err.message
             };
         }
-
         // use static authenticate method of model in LocalStrategy
         const LocalStrategy = require('passport-local').Strategy; 
         passport.use(new LocalStrategy(accountModel.authenticate())); 
-        passport.serializeUser(accountModel.serializeUser());
-        passport.deserializeUser(accountModel.deserializeUser());
+        passport.serializeUser(function(user, done) {
+            done(null, user._id);
+            // if you use Model.id as your idAttribute maybe you'd want
+            // done(null, user.id);
+        });
+        
+        passport.deserializeUser(function(id, done) {
+            var user =  accountModel.findById(id);
+            done(null, user);
+        });
     }
 
-    async createNewAccount(i_username, i_password,req, res){
+    async createNewAccount(i_username, i_password){
         try{ 
             if(!await accountModel.exists({username: i_username})){       
                 await accountModel.register({username:i_username}, i_password);
@@ -41,6 +48,31 @@ class DBConnecting {
                 message: err.message
             };
         }
+    }
+
+    async findAndCreateExternalAccount(profile){
+        try{
+            let account ;
+            if(profile.provider === "google"){
+                account = await accountModel.findOne({"externalInfos.sub" : profile.id});
+            }else{
+                account = await accountModel.findOne({"externalInfos.id" : profile.id});
+            }
+
+            if(!account){
+                account = new accountModel({
+                    provider: profile.provider,
+                    externalInfos: profile._json
+                });
+                await account.save();
+            }
+            return account;
+        }catch(err){            
+            this.error = {
+            title : "Create by "+profile.provider+" account",
+            type: "DB001",
+            message: err.message
+        };}
     }
 
     /**
